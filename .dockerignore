@@ -1,0 +1,13 @@
+.git
+.venv
+runtime
+evidence
+secrets
+.env
+.env.*
+**/*.token
+**/*.pem
+**/*.key
+**/__pycache__
+.pytest_cache
+.ruff_cache

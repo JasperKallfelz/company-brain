@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "company-brain"
+version = "0.1.0"
+description = "Private, source-grounded company knowledge via authenticated MCP"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "mcp==2.3.0", "PyJWT[crypto]==2.15.1", "psycopg[binary]==3.3.6",
+  "pgvector==0.5.0", "httpx==0.28.1", "uvicorn==0.54.0",
+]
+
+[project.optional-dependencies]
+embeddings = ["sentence-transformers==6.1.0", "torch==2.9.1"]
+
+[dependency-groups]
+dev = ["pytest==9.1.1", "pytest-asyncio==1.4.0", "ruff==0.15.6"]
+
+[project.scripts]
+company-brain = "company_brain.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = ["integration: requires BRAIN_TEST_DATABASE_URL pointing to a disposable Postgres database"]
+
+[tool.ruff]
+line-length = 100
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]

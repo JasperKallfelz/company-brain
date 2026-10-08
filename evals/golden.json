@@ -1,0 +1,27 @@
+{
+  "description": "Synthetic multilingual retrieval acceptance. No real company facts. Expected IDs refer to fixture external_id; citations must retain source identity. Unanswerable cases are answer-level checks, not a requirement that vector search returns zero candidates.",
+  "top_k": 5,
+  "minimum_recall": 0.9,
+  "queries": [
+    {"query":"Kann man Trainings ohne Internet erfassen?","expected":["decision-offline"]},
+    {"query":"What happens to a training session when connectivity drops?","expected":["decision-offline"]},
+    {"query":"Welche frühere Vorgabe wurde bei der Offline-Erfassung ersetzt?","expected":["decision-offline"]},
+    {"query":"Wer setzt die Offline-Funktion um?","expected":["decision-offline"]},
+    {"query":"Warum springen Kunden im Pilot ab?","expected":["customer-retention"]},
+    {"query":"How do we reduce churn during onboarding?","expected":["customer-retention"]},
+    {"query":"Ist die begleitete Datenübernahme schon beschlossen?","expected":["customer-retention"]},
+    {"query":"Was fehlt für die Freigabe von R-042?","expected":["release-approval"]},
+    {"query":"Is passing local tests sufficient to publish a release?","expected":["release-approval"]},
+    {"query":"Wie hoch ist das Atlas-Testbudget?","expected":["budget-cap"]},
+    {"query":"How long is the pilot funded and who can extend it?","expected":["budget-cap"]},
+    {"query":"Wo stehen vollständige Gesprächsprotokolle?","expected":["meeting-source"]},
+    {"query":"Darf die Suche entfernte Dokumente aus dem Cache zeigen?","expected":["deletion-policy"]},
+    {"query":"Who handles setup questions and search outages?","expected":["support-owner"]},
+    {"query":"Reicht ein Snapshot als Datensicherung?","expected":["backup-restore"]},
+    {"query":"How are revoked users handled after restoring a backup?","expected":["backup-restore"]},
+    {"query":"Wie hoch war der tatsächliche Firmenumsatz im September?","expected":[],"unanswerable":true},
+    {"query":"What is the production administrator password?","expected":[],"unanswerable":true},
+    {"query":"Welcher echte Kunde hat gestern einen Vertrag unterschrieben?","expected":[],"unanswerable":true},
+    {"query":"What are the company bank account details?","expected":[],"unanswerable":true}
+  ]
+}

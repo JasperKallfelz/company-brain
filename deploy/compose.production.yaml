@@ -1,0 +1,161 @@
+name: company-brain
+services:
+  db:
+    image: pgvector/pgvector:0.8.1-pg17-bookworm@sha256:3e8b3adfd27b5707128f60956f62a793c3c9326ea8cfaf0eab7adccb5d700b21
+    environment:
+      POSTGRES_DB: company_brain
+      POSTGRES_USER: brain
+      POSTGRES_PASSWORD: ${BRAIN_DB_PASSWORD:?Generate production configuration first}
+    volumes: [database:/var/lib/postgresql/data]
+    networks: [brain]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U brain -d company_brain"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1
+    pids_limit: 256
+  identity-db:
+    image: pgvector/pgvector:0.8.1-pg17-bookworm@sha256:3e8b3adfd27b5707128f60956f62a793c3c9326ea8cfaf0eab7adccb5d700b21
+    environment:
+      POSTGRES_DB: company_brain_identity
+      POSTGRES_USER: brain_identity
+      POSTGRES_PASSWORD: ${KC_DB_PASSWORD:?Generate production configuration first}
+    volumes: [identity-database:/var/lib/postgresql/data]
+    networks: [brain]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U brain_identity -d company_brain_identity"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 128
+  admin:
+    image: company-brain:public
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    profiles: [admin]
+    user: "0:0"
+    env_file: ../runtime/production/admin.env
+    command: [python, /ops/bootstrap-production.py]
+    volumes:
+      - ../ops/database-roles.py:/ops/database-roles.py:ro
+      - ../scripts/bootstrap_production.py:/ops/bootstrap-production.py:ro
+      - ../runtime/production/company-brain-realm.json:/input/realm.json:ro
+      - identity-import:/identity
+    networks: [brain]
+    depends_on:
+      db: {condition: service_healthy}
+  brain:
+    image: company-brain:public
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    profiles: [app]
+    env_file:
+      - ../runtime/production/brain.env
+    environment:
+      BRAIN_HOST: 0.0.0.0
+      HF_HOME: /var/cache/huggingface
+    ports: ["127.0.0.1:8010:8010"]
+    volumes: [models:/var/cache/huggingface]
+    networks: [brain]
+    depends_on:
+      db: {condition: service_healthy}
+    user: "10001:10001"
+    read_only: true
+    tmpfs: ["/tmp:size=256m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 6g
+    cpus: 3
+    pids_limit: 256
+    restart: unless-stopped
+  identity:
+    image: company-brain-keycloak:public
+    build:
+      context: ..
+      dockerfile: deploy/identity/Dockerfile
+    profiles: [app]
+    network_mode: service:brain
+    env_file: ../runtime/production/keycloak.env
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://identity-db:5432/company_brain_identity
+      KC_HOSTNAME_STRICT: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_HOST: 127.0.0.1
+      KC_HTTP_PORT: "8081"
+      KC_PROXY_HEADERS: xforwarded
+      KC_PROXY_TRUSTED_ADDRESSES: 127.0.0.1
+      KC_CACHE: local
+      JAVA_OPTS_KC_HEAP: -Xms256m -Xmx768m
+    depends_on:
+      brain: {condition: service_started}
+      identity-db: {condition: service_healthy}
+    volumes: [identity-import:/opt/keycloak/data/import:ro]
+    user: "1000:0"
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+      - /opt/keycloak/data:size=128m,mode=0770,uid=1000,gid=0
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1536m
+    cpus: 1
+    pids_limit: 256
+    restart: unless-stopped
+  gateway:
+    image: nginx:1.30.5-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94
+    profiles: [app]
+    network_mode: service:brain
+    depends_on:
+      brain: {condition: service_started}
+      identity: {condition: service_started}
+    entrypoint: [nginx]
+    command: [-c, /etc/nginx/company-brain.conf, -g, "daemon off;"]
+    volumes:
+      - ../runtime/production/nginx.conf:/etc/nginx/company-brain.conf:ro
+    user: "101:101"
+    read_only: true
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 96m
+    cpus: 0.5
+    pids_limit: 64
+    restart: unless-stopped
+  sync:
+    image: company-brain:public
+    profiles: [sync]
+    command: [python, -m, company_brain, sync-once, --config, /config/sources.json, --state-dir, /var/lib/company-brain/sync]
+    env_file: ../runtime/production/sync.env
+    environment:
+      HF_HOME: /var/cache/huggingface
+    volumes:
+      - ${BRAIN_SOURCES_DIR:-/etc/company-brain/sources}:/config:ro
+      - sync-state:/var/lib/company-brain/sync
+      - models:/var/cache/huggingface
+    networks: [brain]
+    user: "10001:10001"
+    read_only: true
+    tmpfs: ["/tmp:size=256m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 6g
+    cpus: 3
+    pids_limit: 256
+volumes:
+  database:
+  identity-database:
+  identity-import:
+  models:
+  sync-state:
+networks:
+  brain:
+    driver: bridge

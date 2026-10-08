@@ -1,0 +1,28 @@
+{
+  "sources": [
+    {
+      "enabled": false,
+      "source": "notion",
+      "collection": "team",
+      "token_file": "/config/notion.token",
+      "root_page_ids": [],
+      "root_database_ids": []
+    },
+    {
+      "enabled": false,
+      "source": "drive",
+      "collection": "team",
+      "token_file": "/config/drive.token",
+      "root_folder_ids": []
+    },
+    {
+      "enabled": false,
+      "source": "linear",
+      "collection": "team",
+      "token_file": "/config/linear.token",
+      "auth_type": "oauth",
+      "organization_id": null,
+      "team_ids": []
+    }
+  ]
+}

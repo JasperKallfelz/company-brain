@@ -1,0 +1,24 @@
+name: company-brain-demo
+services:
+  db:
+    image: pgvector/pgvector:0.8.1-pg17-bookworm@sha256:3e8b3adfd27b5707128f60956f62a793c3c9326ea8cfaf0eab7adccb5d700b21
+    environment:
+      POSTGRES_DB: company_brain_demo
+      POSTGRES_USER: brain
+      POSTGRES_PASSWORD: ${BRAIN_DB_PASSWORD:?Use scripts/demo.py up}
+    ports: ["127.0.0.1:54329:5432"]
+    volumes: [demo-database:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U brain -d company_brain_demo"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    mem_limit: 1g
+    cpus: 1
+    pids_limit: 256
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options: {max-size: 5m, max-file: "2"}
+volumes:
+  demo-database:

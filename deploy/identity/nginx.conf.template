@@ -1,0 +1,133 @@
+# Loopback port 8010 is for an operator-configured HTTPS reverse proxy or tunnel.
+# No user authentication challenge at the proxy: Brain returns MCP OAuth errors.
+worker_processes 1;
+pid /tmp/nginx.pid;
+# Nginx upstream errors can include the complete OAuth query string. Disable
+# request error logging too; observe process health and aggregate status outside.
+error_log /dev/null crit;
+events { worker_connections 256; }
+http {
+    access_log off; # Never log OAuth codes, query strings, document bodies or tokens.
+    server_tokens off;
+    client_body_temp_path /tmp/client-body;
+    proxy_temp_path /tmp/proxy;
+    # Compiled modules initialize their temp directories even without routes.
+    fastcgi_temp_path /tmp/fastcgi;
+    uwsgi_temp_path /tmp/uwsgi;
+    scgi_temp_path /tmp/scgi;
+    client_max_body_size 2m;
+    client_body_timeout 20s;
+    client_header_timeout 15s;
+    send_timeout 310s;
+    keepalive_timeout 30s;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $host;
+    proxy_set_header Authorization $http_authorization;
+    proxy_set_header Forwarded "";
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Forwarded-Port 443;
+    proxy_set_header X-Forwarded-Prefix "";
+    proxy_set_header X-Original-Forwarded-For "";
+    proxy_set_header X-Real-IP "";
+    proxy_set_header X-Original-URL "";
+    proxy_set_header X-Original-Method "";
+    proxy_set_header X-Forwarded-Access-Token "";
+    proxy_set_header Proxy "";
+    proxy_set_header traceparent "";
+    proxy_set_header tracestate "";
+    proxy_set_header baggage "";
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_request_buffering off;
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 310s;
+    proxy_send_timeout 30s;
+    add_header Cache-Control "no-store" always;
+    add_header X-Content-Type-Options nosniff always;
+
+    # Reject ambiguous raw paths BEFORE Nginx normalizes dotsegments/escapes.
+    # Query values may contain encoded redirect URIs, therefore inspect only path.
+    map $request_uri $invalid_path {
+        default 0;
+        # Separate rules avoid Nginx config escaping consuming a PCRE branch.
+        ~^[^?]*% 1;
+        ~^[^?]*// 1;
+        ~^[^?]*\x5c 1;
+        ~^[^?]*/[.][.]?(/|[?]|$) 1;
+    }
+    map $http_host $known_host {
+        default 0;
+        __BRAIN_HOST__ 1;
+        __IDENTITY_HOST__ 1;
+        __BRAIN_HOST__:443 1;
+        __IDENTITY_HOST__:443 1;
+    }
+    server {
+        listen 8010 default_server;
+        server_name _;
+        return 404;
+    }
+    server {
+        listen 8010;
+        server_name __BRAIN_HOST__;
+        if ($known_host = 0) { return 404; }
+        if ($invalid_path) { return 404; }
+        location = /mcp {
+            limit_except GET POST DELETE OPTIONS { deny all; }
+            proxy_pass http://127.0.0.1:8000;
+        }
+        location = /mcp/ {
+            limit_except GET POST DELETE OPTIONS { deny all; }
+            proxy_pass http://127.0.0.1:8000/mcp;
+        }
+        location = /.well-known/oauth-protected-resource {
+            limit_except GET { deny all; }
+            proxy_pass http://127.0.0.1:8000;
+        }
+        location = /.well-known/oauth-protected-resource/mcp {
+            limit_except GET { deny all; }
+            proxy_pass http://127.0.0.1:8000;
+        }
+        location / { return 404; }
+    }
+    server {
+        listen 8010;
+        server_name __IDENTITY_HOST__;
+        if ($known_host = 0) { return 404; }
+        if ($invalid_path) { return 404; }
+        location = /realms/company-brain/.well-known/openid-configuration {
+            limit_except GET { deny all; }
+            proxy_pass http://127.0.0.1:8081;
+        }
+        # RFC8414 and OIDC issuer-path metadata discovery both resolve identically.
+        location = /.well-known/oauth-authorization-server/realms/company-brain {
+            limit_except GET { deny all; }
+            proxy_pass http://127.0.0.1:8081/realms/company-brain/.well-known/openid-configuration;
+        }
+        location = /.well-known/openid-configuration/realms/company-brain {
+            limit_except GET { deny all; }
+            proxy_pass http://127.0.0.1:8081/realms/company-brain/.well-known/openid-configuration;
+        }
+        location ~ ^/realms/company-brain/protocol/openid-connect/(auth|token|certs|logout|revoke|userinfo)$ {
+            limit_except GET POST OPTIONS { deny all; }
+            proxy_pass http://127.0.0.1:8081;
+        }
+        location ~ ^/realms/company-brain/login-actions/(authenticate|action-token|restart|reset-credentials|first-broker-login|required-action|consent)$ {
+            limit_except GET POST { deny all; }
+            proxy_pass http://127.0.0.1:8081;
+        }
+        # Reserved for explicitly configured Workspace federation, presently absent.
+        location ~ ^/realms/company-brain/broker/google/(login|endpoint)$ {
+            limit_except GET POST { deny all; }
+            proxy_pass http://127.0.0.1:8081;
+        }
+        location ~ ^/resources/[A-Za-z0-9_-]+/(login|common)/[A-Za-z0-9_./@-]+$ {
+            limit_except GET { deny all; }
+            proxy_pass http://127.0.0.1:8081;
+        }
+        location / { return 404; }
+    }
+}
